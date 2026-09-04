@@ -5,6 +5,7 @@ pub enum Error {
     Parse(String),
     Runtime(String),
     Alloc(String),
+    Validate(String),
 }
 
 impl fmt::Display for Error {
@@ -13,6 +14,7 @@ impl fmt::Display for Error {
             Error::Parse(m) => write!(f, "parse error: {m}"),
             Error::Runtime(m) => write!(f, "runtime error: {m}"),
             Error::Alloc(m) => write!(f, "allocation error: {m}"),
+            Error::Validate(m) => write!(f, "validation error: {m}"),
         }
     }
 }

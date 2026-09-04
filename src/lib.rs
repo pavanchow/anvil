@@ -16,11 +16,13 @@ pub mod parse;
 pub mod regalloc;
 pub mod ssa;
 pub mod target;
+pub mod validate;
 
 pub use error::{Error, Result};
 
 /// Full backend: SSA destruction, register allocation, lowering to target code.
 pub fn compile(func: &ir::Function, k: usize) -> Result<target::TFunc> {
+    validate::validate(func)?;
     let phi_free = ssa::destruct(func);
     let alloc = regalloc::allocate(&phi_free, k)?;
     Ok(lower::lower(&alloc))
@@ -28,6 +30,7 @@ pub fn compile(func: &ir::Function, k: usize) -> Result<target::TFunc> {
 
 /// Run the reference interpreter (the oracle) on the SSA IR.
 pub fn run_ir(func: &ir::Function, args: &[i64]) -> Result<i64> {
+    validate::validate(func)?;
     interp::run(func, args)
 }
 

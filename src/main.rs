@@ -116,6 +116,7 @@ fn cmd_regalloc(args: &[String]) -> Result<()> {
     let p = parse_args(args)?;
     let k = need_regs(&p)?;
     let f = load(&p.file)?;
+    anvil::validate::validate(&f)?;
     let phi_free = ssa::destruct(&f);
     let live = liveness::analyze(&phi_free);
     let ig = interference::build(&phi_free, &live);
@@ -154,6 +155,7 @@ fn cmd_emit(args: &[String]) -> Result<()> {
     let p = parse_args(args)?;
     let k = need_regs(&p)?;
     let f = load(&p.file)?;
+    anvil::validate::validate(&f)?;
     let phi_free = ssa::destruct(&f);
     let alloc = regalloc::allocate(&phi_free, k)?;
     let tf = lower::lower(&alloc);
@@ -165,6 +167,7 @@ fn cmd_check(args: &[String]) -> Result<()> {
     let p = parse_args(args)?;
     let k = need_regs(&p)?;
     let f = load(&p.file)?;
+    anvil::validate::validate(&f)?;
     let phi_free = ssa::destruct(&f);
     let alloc = regalloc::allocate(&phi_free, k)?;
     let tf = lower::lower(&alloc);
