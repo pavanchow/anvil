@@ -1,12 +1,845 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="auto">
 <head>
 <meta charset="UTF-8">
-<title>anvil</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anvil - a compiler backend with a readable register allocator</title>
+<style>
+:root{
+  --bg:#f5f5f7; --panel:#ffffff; --fg:#1d1d1f; --muted:#6e6e73;
+  --border:#d2d2d7; --accent:#0071e3; --good:#1a7f37; --bad:#d70015;
+  --code-bg:#f5f5f7; --chip:#ececf0; --shadow:0 1px 3px rgba(0,0,0,.08);
+}
+/* Base body first. */
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased; line-height:1.5;
+}
+/* Dark defaults follow the base rules so text is never light on white. */
+@media (prefers-color-scheme: dark){
+  html[data-theme="auto"]{
+    --bg:#000000; --panel:#1c1c1e; --fg:#f5f5f7; --muted:#98989d;
+    --border:#38383a; --accent:#0a84ff; --good:#30d158; --bad:#ff453a;
+    --code-bg:#0e0e10; --chip:#2c2c2e; --shadow:0 1px 3px rgba(0,0,0,.5);
+  }
+  html[data-theme="auto"] body{ background:var(--bg); color:var(--fg); }
+}
+html[data-theme="dark"]{
+  --bg:#000000; --panel:#1c1c1e; --fg:#f5f5f7; --muted:#98989d;
+  --border:#38383a; --accent:#0a84ff; --good:#30d158; --bad:#ff453a;
+  --code-bg:#0e0e10; --chip:#2c2c2e; --shadow:0 1px 3px rgba(0,0,0,.5);
+}
+html[data-theme="dark"] body{ background:var(--bg); color:var(--fg); }
+
+*{box-sizing:border-box}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+header.hero{
+  text-align:center; padding:72px 20px 40px; max-width:820px; margin:0 auto;
+}
+.hero h1{ font-size:56px; font-weight:700; letter-spacing:-.02em; margin:0 0 6px; }
+.hero .tag{ font-size:23px; color:var(--muted); font-weight:500; margin:0 0 18px; }
+.hero p{ font-size:17px; color:var(--muted); max-width:660px; margin:0 auto; }
+.hero .links{ margin-top:22px; font-size:16px; }
+.hero .links a{ margin:0 10px; }
+
+.theme-toggle{
+  position:fixed; top:16px; right:16px; z-index:10;
+  border:1px solid var(--border); background:var(--panel); color:var(--fg);
+  border-radius:20px; padding:7px 14px; font-size:13px; cursor:pointer; box-shadow:var(--shadow);
+}
+
+main{ max-width:1120px; margin:0 auto; padding:0 20px 80px; }
+
+.section-title{ font-size:15px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:44px 0 14px; }
+
+.controls{
+  background:var(--panel); border:1px solid var(--border); border-radius:16px;
+  padding:20px; box-shadow:var(--shadow); margin-bottom:16px;
+}
+.controls .row{ display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; margin-top:14px; }
+.field{ display:flex; flex-direction:column; gap:5px; }
+.field label{ font-size:12px; color:var(--muted); font-weight:600; }
+textarea{
+  width:100%; min-height:300px; resize:vertical; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:13.5px; line-height:1.55; padding:14px; border:1px solid var(--border);
+  border-radius:12px; background:var(--code-bg); color:var(--fg); tab-size:2;
+}
+input[type=number],input[type=text]{
+  font-family:ui-monospace,Menlo,monospace; font-size:14px; padding:9px 11px;
+  border:1px solid var(--border); border-radius:10px; background:var(--code-bg); color:var(--fg);
+}
+input[type=number]{ width:88px; }
+input[type=text]{ width:180px; }
+button.run{
+  background:var(--accent); color:#fff; border:0; border-radius:980px;
+  padding:11px 26px; font-size:15px; font-weight:600; cursor:pointer;
+}
+button.run:hover{ filter:brightness(1.06); }
+.presets{ display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
+.chip{
+  background:var(--chip); border:1px solid var(--border); border-radius:980px;
+  padding:6px 14px; font-size:13px; cursor:pointer; color:var(--fg);
+}
+.chip:hover{ border-color:var(--accent); }
+
+.banner{ border-radius:14px; padding:16px 20px; margin-bottom:18px; font-size:16px; font-weight:600; border:1px solid var(--border); background:var(--panel); }
+.banner.ok{ border-color:var(--good); }
+.banner.bad{ border-color:var(--bad); }
+.banner .dot{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:9px; vertical-align:middle; }
+.banner.ok .dot{ background:var(--good); }
+.banner.bad .dot{ background:var(--bad); }
+.banner .sub{ display:block; font-weight:400; color:var(--muted); font-size:14px; margin-top:6px; }
+
+.grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:820px){ .grid{ grid-template-columns:1fr; } .hero h1{font-size:42px} }
+.card{ background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:18px 20px; box-shadow:var(--shadow); overflow:auto; }
+.card h3{ margin:0 0 12px; font-size:15px; font-weight:600; }
+.card h3 .hint{ font-weight:400; color:var(--muted); font-size:12.5px; margin-left:6px; }
+pre.asm{ margin:0; font-family:ui-monospace,Menlo,monospace; font-size:13px; line-height:1.5; white-space:pre; color:var(--fg); }
+table.lv{ width:100%; border-collapse:collapse; font-family:ui-monospace,Menlo,monospace; font-size:12.5px; }
+table.lv th,table.lv td{ text-align:left; padding:5px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+table.lv th{ color:var(--muted); font-weight:600; }
+.mono{ font-family:ui-monospace,Menlo,monospace; font-size:12.5px; }
+.reg{ color:var(--accent); font-weight:600; }
+.slot{ color:var(--bad); font-weight:600; }
+.err{ color:var(--bad); font-family:ui-monospace,Menlo,monospace; font-size:13px; white-space:pre-wrap; }
+.foot{ text-align:center; color:var(--muted); font-size:13px; padding:30px 20px 10px; }
+.count{ color:var(--muted); font-weight:400; font-size:12.5px; }
+</style>
 </head>
 <body>
-<h1>anvil</h1>
-<p>Site coming soon.</p>
-<p><a href="https://github.com/pavanchow/anvil">View repository</a></p>
+<button class="theme-toggle" id="themeBtn">Theme</button>
+
+<header class="hero">
+  <h1>Anvil</h1>
+  <p class="tag">A compiler backend with a readable register allocator</p>
+  <p>Most build your own compiler projects stop at the front end. Anvil is the backend. It takes an SSA intermediate representation and lowers it to a small target machine with only K physical registers, and it proves the result correct by running two interpreters and asserting they agree.</p>
+  <div class="links">
+    <a href="https://github.com/pavanchow/anvil">Repository</a>
+    <a href="#playground">Playground</a>
+  </div>
+</header>
+
+<main>
+  <div class="section-title" id="playground">Live playground</div>
+  <div class="controls">
+    <div class="field" style="width:100%">
+      <label>SSA IR</label>
+      <textarea id="src" spellcheck="false"></textarea>
+    </div>
+    <div class="presets" id="presets"></div>
+    <div class="row">
+      <div class="field">
+        <label>Physical registers (K)</label>
+        <input type="number" id="k" min="2" max="16" value="2">
+      </div>
+      <div class="field">
+        <label>Arguments (comma separated)</label>
+        <input type="text" id="args" value="100">
+      </div>
+      <button class="run" id="runBtn">Compile and check</button>
+    </div>
+  </div>
+
+  <div id="result"></div>
+
+  <div class="grid">
+    <div class="card"><h3>Liveness <span class="hint">live-in and live-out per block, phi-free</span></h3><div id="liveness"></div></div>
+    <div class="card"><h3>Interference graph <span class="hint">who cannot share a register</span></h3><div id="interference"></div></div>
+    <div class="card"><h3>Allocation <span class="hint">coloring and spills at K</span></h3><div id="allocation"></div></div>
+    <div class="card"><h3>Target assembly <span class="hint">the lowered code the target machine runs</span></h3><pre class="asm" id="target"></pre></div>
+  </div>
+
+  <div class="foot">
+    Built from scratch by Pavan Nallamothu. This page ports the Rust pipeline to JavaScript and mirrors its behavior.
+  </div>
+</main>
+
+<script>
+"use strict";
+
+// ---------- 64-bit arithmetic, shared by both interpreters ----------
+const MOD = 1n << 64n, HALF = 1n << 63n, MIN = -(1n << 63n);
+function wrap(x){ let r = ((x % MOD) + MOD) % MOD; return r >= HALF ? r - MOD : r; }
+const BINOPS = new Set("add sub mul div mod and or xor shl shr eq ne lt le gt ge".split(" "));
+function binEval(op, a, b){
+  switch(op){
+    case "add": return wrap(a + b);
+    case "sub": return wrap(a - b);
+    case "mul": return wrap(a * b);
+    case "div": if(b === 0n) throw "division by zero"; return (a === MIN && b === -1n) ? MIN : wrap(a / b);
+    case "mod": if(b === 0n) throw "modulo by zero"; return (a === MIN && b === -1n) ? 0n : wrap(a % b);
+    case "and": return wrap(a & b);
+    case "or":  return wrap(a | b);
+    case "xor": return wrap(a ^ b);
+    case "shl": return wrap(a << (b & 63n));
+    case "shr": return wrap(a >> (b & 63n));
+    case "eq": return a === b ? 1n : 0n;
+    case "ne": return a !== b ? 1n : 0n;
+    case "lt": return a <  b ? 1n : 0n;
+    case "le": return a <= b ? 1n : 0n;
+    case "gt": return a >  b ? 1n : 0n;
+    case "ge": return a >= b ? 1n : 0n;
+  }
+  throw "unknown operator " + op;
+}
+
+// ---------- helpers ----------
+const clone = o => JSON.parse(JSON.stringify(o));
+const sorted = s => [...s].sort();
+const setEq = (a, b) => a.size === b.size && [...a].every(x => b.has(x));
+function esc(s){ return String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function instUses(i){
+  switch(i.k){
+    case "const": case "load": return [];
+    case "bin": return [i.a, i.b];
+    case "copy": return [i.src];
+    case "store": return [i.src];
+    case "phi": return i.args.map(a => a[1]);
+  }
+  return [];
+}
+function instDef(i){
+  switch(i.k){
+    case "const": case "bin": case "copy": case "phi": case "load": return i.dst;
+    case "store": return null;
+  }
+  return null;
+}
+function termUses(t){ if(t.k === "br") return [t.cond]; if(t.k === "ret") return [t.v]; return []; }
+function termSuccs(t){ if(t.k === "jmp") return [t.l]; if(t.k === "br") return [t.then, t.els]; return []; }
+function vregsOf(f){
+  let s = new Set(f.params);
+  for(const b of f.blocks){
+    for(const i of b.insts){ const d = instDef(i); if(d !== null) s.add(d); for(const u of instUses(i)) s.add(u); }
+    for(const u of termUses(b.term)) s.add(u);
+  }
+  return s;
+}
+function preds(f){
+  let m = {}; for(const b of f.blocks) m[b.label] = [];
+  for(const b of f.blocks) for(const s of termSuccs(b.term)) m[s].push(b.label);
+  return m;
+}
+
+// ---------- parser ----------
+function clean(l){ const i = l.indexOf(";"); if(i >= 0) l = l.slice(0, i); return l.trim(); }
+function parseVreg(s){ s = s.trim(); if(!s.startsWith("%")) throw `expected %reg, got '${s}'`; const n = s.slice(1); if(!n) throw "empty register name"; return n; }
+function parseSlot(s){ s = s.trim(); if(!s.startsWith("slot")) throw `expected slotN, got '${s}'`; const n = parseInt(s.slice(4), 10); if(isNaN(n)) throw `bad slot '${s}'`; return n; }
+
+function parseProgram(src){
+  const raw = src.split(/\r?\n/);
+  let i = 0;
+  while(i < raw.length && clean(raw[i]) === "") i++;
+  if(i >= raw.length) throw "no function found";
+  return parseFunctionAt(raw, i).func;
+}
+function parseFunctionAt(raw, start){
+  let header = clean(raw[start]);
+  if(!header.startsWith("fn ")) throw `expected fn header: ${header}`;
+  header = header.slice(3);
+  const open = header.indexOf("("), close = header.indexOf(")");
+  if(open < 0) throw "missing '(' in header";
+  if(close < 0) throw "missing ')' in header";
+  const name = header.slice(0, open).trim();
+  if(!name) throw "missing function name";
+  const params = [];
+  for(let p of header.slice(open + 1, close).split(",")){ p = p.trim(); if(p) params.push(parseVreg(p)); }
+  if(!header.slice(close + 1).includes("{")) throw `expected '{' in header: ${header}`;
+
+  const blocks = [];
+  let curLabel = null, curInsts = [], curTerm = null;
+  let i = start + 1;
+  const flush = () => {
+    if(curLabel !== null){
+      if(curTerm === null) throw `block ${curLabel} missing terminator`;
+      blocks.push({ label: curLabel, insts: curInsts, term: curTerm });
+    }
+  };
+  while(true){
+    if(i >= raw.length) throw "unterminated function";
+    const line = clean(raw[i]); i++;
+    if(line === "") continue;
+    if(line === "}"){ flush(); break; }
+    if(line.endsWith(":")){ flush(); curLabel = line.slice(0, -1).trim(); curInsts = []; curTerm = null; continue; }
+    if(curLabel === null) throw `instruction outside a block: ${line}`;
+    if(curTerm !== null) throw `instruction after terminator: ${line}`;
+    const r = parseLine(line);
+    if(r.term) curTerm = r.term; else curInsts.push(r.inst);
+  }
+  if(blocks.length === 0) throw `function ${name} has no blocks`;
+  return { func: { name, params, blocks }, next: i };
+}
+function parseLine(line){
+  if(line.startsWith("jmp ")) return { term: { k: "jmp", l: line.slice(4).trim() } };
+  if(line.startsWith("br ")){
+    const p = line.slice(3).split(",").map(s => s.trim());
+    if(p.length !== 3) throw `br needs cond, then, else: ${line}`;
+    return { term: { k: "br", cond: parseVreg(p[0]), then: p[1], els: p[2] } };
+  }
+  if(line.startsWith("ret ")) return { term: { k: "ret", v: parseVreg(line.slice(4).trim()) } };
+  if(line.startsWith("store ")){
+    const p = line.slice(6).split(",").map(s => s.trim());
+    if(p.length !== 2) throw `store needs slot, reg: ${line}`;
+    return { inst: { k: "store", slot: parseSlot(p[0]), src: parseVreg(p[1]) } };
+  }
+  const eq = line.indexOf("=");
+  if(eq < 0) throw `expected '=' in '${line}'`;
+  const dst = parseVreg(line.slice(0, eq).trim());
+  return { inst: parseRhs(dst, line.slice(eq + 1).trim()) };
+}
+function parseRhs(dst, rhs){
+  if(rhs.startsWith("const ")){ const t = rhs.slice(6).trim(); if(!/^-?\d+$/.test(t)) throw `bad const value '${t}'`; return { k: "const", dst, val: t }; }
+  if(rhs.startsWith("copy ")) return { k: "copy", dst, src: parseVreg(rhs.slice(5).trim()) };
+  if(rhs.startsWith("load ")) return { k: "load", dst, slot: parseSlot(rhs.slice(5).trim()) };
+  if(rhs.startsWith("phi")) return parsePhi(dst, rhs.slice(3).trim());
+  const sp = rhs.indexOf(" ");
+  if(sp < 0) throw `bad instruction '${rhs}'`;
+  const opn = rhs.slice(0, sp);
+  if(!BINOPS.has(opn)) throw `unknown operator '${opn}'`;
+  const ops = rhs.slice(sp + 1).split(",").map(s => s.trim());
+  if(ops.length !== 2) throw `binop needs two operands '${rhs}'`;
+  return { k: "bin", dst, op: opn, a: parseVreg(ops[0]), b: parseVreg(ops[1]) };
+}
+function parsePhi(dst, r){
+  if(!(r.startsWith("[") && r.endsWith("]"))) throw `phi expects [..]: '${r}'`;
+  const args = [];
+  for(let part of r.slice(1, -1).split(",")){
+    part = part.trim(); if(!part) continue;
+    const c = part.indexOf(":"); if(c < 0) throw `phi arg expects 'label: %reg': '${part}'`;
+    args.push([part.slice(0, c).trim(), parseVreg(part.slice(c + 1).trim())]);
+  }
+  return { k: "phi", dst, args };
+}
+
+// ---------- reference interpreter (the oracle) ----------
+function irRun(f, args){
+  try{
+    if(args.length !== f.params.length) throw `expected ${f.params.length} args, got ${args.length}`;
+    const env = {}; f.params.forEach((p, i) => env[p] = args[i]);
+    const slots = [];
+    const get = v => { if(!(v in env)) throw `use of undefined %${v}`; return env[v]; };
+    let cur = f.blocks[0].label, prev = null, steps = 0;
+    while(true){
+      if(++steps > 5000000) throw "step limit exceeded";
+      const block = f.blocks.find(b => b.label === cur);
+      if(!block) throw `no block ${cur}`;
+      const updates = [];
+      for(const inst of block.insts){
+        if(inst.k === "phi"){
+          if(prev === null) throw "phi reached without a predecessor";
+          const arg = inst.args.find(a => a[0] === prev);
+          if(!arg) throw `phi has no entry for pred ${prev}`;
+          updates.push([inst.dst, get(arg[1])]);
+        }
+      }
+      for(const [d, v] of updates) env[d] = v;
+      for(const inst of block.insts){
+        switch(inst.k){
+          case "phi": break;
+          case "const": env[inst.dst] = wrap(BigInt(inst.val)); break;
+          case "bin": env[inst.dst] = binEval(inst.op, get(inst.a), get(inst.b)); break;
+          case "copy": env[inst.dst] = get(inst.src); break;
+          case "load": if(slots[inst.slot] === undefined) throw `load from unset slot${inst.slot}`; env[inst.dst] = slots[inst.slot]; break;
+          case "store": slots[inst.slot] = get(inst.src); break;
+        }
+      }
+      const t = block.term;
+      if(t.k === "jmp"){ prev = cur; cur = t.l; }
+      else if(t.k === "br"){ const c = get(t.cond); prev = cur; cur = (c !== 0n) ? t.then : t.els; }
+      else return { ok: true, val: get(t.v) };
+    }
+  }catch(e){ return { ok: false, err: String(e) }; }
+}
+
+// ---------- SSA destruction ----------
+function destruct(func){ const f = clone(func); splitCriticalEdges(f); eliminatePhis(f); return f; }
+function redirect(t, from, to){
+  if(t.k === "jmp"){ if(t.l === from) t.l = to; }
+  else if(t.k === "br"){ if(t.then === from) t.then = to; else if(t.els === from) t.els = to; }
+}
+function splitCriticalEdges(f){
+  let counter = 0;
+  while(true){
+    const p = preds(f);
+    let found = null;
+    for(const b of f.blocks){
+      const ss = termSuccs(b.term);
+      if(ss.length <= 1) continue;
+      for(const s of ss){ if((p[s] || []).length > 1){ found = [b.label, s]; break; } }
+      if(found) break;
+    }
+    if(!found) break;
+    const [pl, sl] = found, mid = ".edge" + (counter++);
+    f.blocks.push({ label: mid, insts: [], term: { k: "jmp", l: sl } });
+    redirect(f.blocks.find(b => b.label === pl).term, sl, mid);
+    for(const i of f.blocks.find(b => b.label === sl).insts)
+      if(i.k === "phi") for(const a of i.args) if(a[0] === pl) a[0] = mid;
+  }
+}
+function sequenceParallelCopies(copies, fresh){
+  let pending = copies.filter(([d, s]) => d !== s).map(x => [...x]);
+  const result = [];
+  while(pending.length){
+    const srcs = new Set(pending.map(c => c[1]));
+    const pos = pending.findIndex(c => !srcs.has(c[0]));
+    if(pos >= 0){ result.push(pending.splice(pos, 1)[0]); }
+    else{
+      const d = pending[0][0], tmp = ".pc" + (fresh.n++);
+      result.push([tmp, d]);
+      for(const c of pending) if(c[1] === d) c[1] = tmp;
+    }
+  }
+  return result;
+}
+function eliminatePhis(f){
+  const cpp = {};
+  for(const b of f.blocks)
+    for(const i of b.insts)
+      if(i.k === "phi")
+        for(const [pred, val] of i.args){ (cpp[pred] = cpp[pred] || []).push([i.dst, val]); }
+  const fresh = { n: 0 };
+  for(const b of f.blocks)
+    if(cpp[b.label])
+      for(const [dst, src] of sequenceParallelCopies(cpp[b.label], fresh))
+        b.insts.push({ k: "copy", dst, src });
+  for(const b of f.blocks) b.insts = b.insts.filter(i => i.k !== "phi");
+}
+
+// ---------- liveness ----------
+function blockUseDef(b){
+  const used = new Set(), defined = new Set();
+  for(const i of b.insts){
+    for(const u of instUses(i)) if(!defined.has(u)) used.add(u);
+    const d = instDef(i); if(d !== null) defined.add(d);
+  }
+  for(const u of termUses(b.term)) if(!defined.has(u)) used.add(u);
+  return [used, defined];
+}
+function liveness(f){
+  const useSet = {}, defSet = {}, liveIn = {}, liveOut = {};
+  for(const b of f.blocks){ const [u, d] = blockUseDef(b); useSet[b.label] = u; defSet[b.label] = d; liveIn[b.label] = new Set(); liveOut[b.label] = new Set(); }
+  let changed = true;
+  while(changed){
+    changed = false;
+    for(let bi = f.blocks.length - 1; bi >= 0; bi--){
+      const b = f.blocks[bi];
+      const out = new Set();
+      for(const s of termSuccs(b.term)) for(const v of liveIn[s]) out.add(v);
+      const inn = new Set(useSet[b.label]);
+      for(const v of out) if(!defSet[b.label].has(v)) inn.add(v);
+      if(!setEq(out, liveOut[b.label])){ liveOut[b.label] = out; changed = true; }
+      if(!setEq(inn, liveIn[b.label])){ liveIn[b.label] = inn; changed = true; }
+    }
+  }
+  return { liveIn, liveOut };
+}
+
+// ---------- interference ----------
+function interference(f, live){
+  const adj = {};
+  for(const v of vregsOf(f)) adj[v] = new Set();
+  const edge = (a, b) => { if(a === b) return; adj[a].add(b); adj[b].add(a); };
+  const ps = f.params;
+  for(let i = 0; i < ps.length; i++) for(let j = i + 1; j < ps.length; j++) edge(ps[i], ps[j]);
+  for(const b of f.blocks){
+    const liveNow = new Set(live.liveOut[b.label]);
+    for(const u of termUses(b.term)) liveNow.add(u);
+    for(let idx = b.insts.length - 1; idx >= 0; idx--){
+      const inst = b.insts[idx];
+      const d = instDef(inst);
+      if(d !== null){
+        for(const v of liveNow){
+          if(inst.k === "copy" && v === inst.src) continue;
+          if(v !== d) edge(d, v);
+        }
+        liveNow.delete(d);
+      }
+      for(const u of instUses(inst)) liveNow.add(u);
+    }
+  }
+  return adj;
+}
+
+// ---------- register allocation (Chaitin-Briggs) ----------
+function color(adj, k, params, prot){
+  const remaining = new Set(Object.keys(adj));
+  const degree = {}; for(const v in adj) degree[v] = adj[v].size;
+  const stack = [];
+  while(remaining.size){
+    let node = null;
+    for(const v of sorted(remaining)) if(degree[v] < k){ node = v; break; }
+    if(node === null) node = pickSpill(remaining, degree, params, prot);
+    remaining.delete(node);
+    for(const m of adj[node]) if(remaining.has(m)) degree[m] = Math.max(0, degree[m] - 1);
+    stack.push(node);
+  }
+  const coloring = {}, actual = [];
+  while(stack.length){
+    const node = stack.pop();
+    const used = new Set();
+    for(const m of adj[node]) if(m in coloring) used.add(coloring[m]);
+    let c = -1;
+    for(let x = 0; x < k; x++) if(!used.has(x)){ c = x; break; }
+    if(c >= 0) coloring[node] = c; else actual.push(node);
+  }
+  return actual.length ? { spills: actual } : { coloring };
+}
+function pickSpill(remaining, degree, params, prot){
+  let best = null, bestKey = null;
+  for(const v of sorted(remaining)){
+    const tier = prot.has(v) ? 0 : params.has(v) ? 1 : 2;
+    const key = [tier, degree[v]];
+    if(bestKey === null || key[0] > bestKey[0] || (key[0] === bestKey[0] && key[1] > bestKey[1])){ best = v; bestKey = key; }
+  }
+  return best;
+}
+function renameUses(inst, subst){
+  const s = v => (v in subst) ? subst[v] : v;
+  switch(inst.k){
+    case "bin": inst.a = s(inst.a); inst.b = s(inst.b); break;
+    case "copy": inst.src = s(inst.src); break;
+    case "store": inst.src = s(inst.src); break;
+    case "phi": for(const a of inst.args) a[1] = s(a[1]); break;
+  }
+}
+function renameDef(inst, t){
+  if(inst.k !== "store") inst.dst = t;
+}
+function renameTermUses(term, subst){
+  if(term.k === "br" && term.cond in subst) term.cond = subst[term.cond];
+  else if(term.k === "ret" && term.v in subst) term.v = subst[term.v];
+}
+function rewriteSpills(f, spills, slotOf, params, fresh){
+  const spillSet = new Set(spills), created = [], nf = clone(f);
+  const mk = () => { const v = ".sp" + (fresh.n++); created.push(v); return v; };
+  for(const b of nf.blocks){
+    const out = [];
+    for(let inst of b.insts){
+      inst = clone(inst);
+      const subst = {};
+      for(const u of instUses(inst)) if(spillSet.has(u) && !(u in subst)){ const t = mk(); out.push({ k: "load", dst: t, slot: slotOf[u] }); subst[u] = t; }
+      renameUses(inst, subst);
+      const d = instDef(inst);
+      if(d !== null && spillSet.has(d)){ const t = mk(); renameDef(inst, t); out.push(inst); out.push({ k: "store", src: t, slot: slotOf[d] }); }
+      else out.push(inst);
+    }
+    const subst = {};
+    for(const u of termUses(b.term)) if(spillSet.has(u) && !(u in subst)){ const t = mk(); out.push({ k: "load", dst: t, slot: slotOf[u] }); subst[u] = t; }
+    renameTermUses(b.term, subst);
+    b.insts = out;
+  }
+  const spilledParams = f.params.filter(p => spillSet.has(p));
+  if(spilledParams.length){
+    const entry = nf.blocks[0];
+    for(const p of [...spilledParams].reverse()) if(params.has(p)) entry.insts.unshift({ k: "store", src: p, slot: slotOf[p] });
+  }
+  return { nf, created };
+}
+function allocate(func, k){
+  if(k < 2) throw "need at least 2 registers";
+  const params = new Set(func.params);
+  if(params.size > k) throw `cannot allocate: ${params.size} parameters exceed ${k} registers`;
+  let f = clone(func);
+  const slotOf = {}; let nextSlot = 0; const spilledAll = []; const prot = new Set(); const fresh = { n: 0 }; let rounds = 0;
+  while(true){
+    rounds++;
+    if(rounds > 10000) throw "spilling did not converge";
+    const live = liveness(f);
+    const adj = interference(f, live);
+    const r = color(adj, k, params, prot);
+    if(r.coloring) return { func: f, coloring: r.coloring, slots: slotOf, numRegs: k, numSlots: nextSlot, spilled: spilledAll, rounds };
+    if(r.spills.some(s => prot.has(s))) throw `cannot allocate with ${k} registers: an instruction needs more live values than registers`;
+    for(const s of r.spills){ if(!(s in slotOf)) slotOf[s] = nextSlot++; spilledAll.push(s); }
+    const { nf, created } = rewriteSpills(f, r.spills, slotOf, params, fresh);
+    for(const t of created) prot.add(t);
+    f = nf;
+  }
+}
+function allocLocation(alloc, v){
+  if(v in alloc.slots) return { slot: alloc.slots[v] };
+  if(v in alloc.coloring) return { reg: alloc.coloring[v] };
+  return null;
+}
+
+// ---------- lowering + target machine ----------
+function lower(alloc){
+  const f = alloc.func, col = alloc.coloring;
+  const reg = v => { if(!(v in col)) throw `uncolored vreg ${v} reached lowering`; return col[v]; };
+  const blocks = f.blocks.map(b => {
+    const insts = [];
+    for(const i of b.insts){
+      if(i.k === "const") insts.push({ k: "movi", d: reg(i.dst), imm: i.val });
+      else if(i.k === "copy"){ const d = reg(i.dst), s = reg(i.src); if(d !== s) insts.push({ k: "mov", d, s }); }
+      else if(i.k === "bin") insts.push({ k: "bin", d: reg(i.dst), op: i.op, a: reg(i.a), b: reg(i.b) });
+      else if(i.k === "load") insts.push({ k: "load", d: reg(i.dst), slot: i.slot });
+      else if(i.k === "store") insts.push({ k: "store", slot: i.slot, s: reg(i.src) });
+      else throw "phi must be eliminated before lowering";
+    }
+    let term;
+    if(b.term.k === "jmp") term = { k: "jmp", l: b.term.l };
+    else if(b.term.k === "br") term = { k: "br", cond: reg(b.term.cond), then: b.term.then, els: b.term.els };
+    else term = { k: "ret", r: reg(b.term.v) };
+    return { label: b.label, insts, term };
+  });
+  return { name: f.name, numRegs: alloc.numRegs, numSlots: alloc.numSlots, paramRegs: f.params.map(reg), blocks };
+}
+function targetRun(tf, args){
+  try{
+    if(args.length !== tf.paramRegs.length) throw `expected ${tf.paramRegs.length} args, got ${args.length}`;
+    const regs = new Array(Math.max(tf.numRegs, 1)).fill(0n);
+    const slots = new Array(tf.numSlots).fill(0n);
+    tf.paramRegs.forEach((r, i) => regs[r] = args[i]);
+    let cur = tf.blocks[0].label, steps = 0;
+    while(true){
+      if(++steps > 5000000) throw "step limit exceeded";
+      const b = tf.blocks.find(x => x.label === cur);
+      if(!b) throw `no block ${cur}`;
+      for(const i of b.insts){
+        switch(i.k){
+          case "movi": regs[i.d] = wrap(BigInt(i.imm)); break;
+          case "mov": regs[i.d] = regs[i.s]; break;
+          case "bin": regs[i.d] = binEval(i.op, regs[i.a], regs[i.b]); break;
+          case "load": regs[i.d] = slots[i.slot]; break;
+          case "store": slots[i.slot] = regs[i.s]; break;
+        }
+      }
+      const t = b.term;
+      if(t.k === "jmp") cur = t.l;
+      else if(t.k === "br") cur = (regs[t.cond] !== 0n) ? t.then : t.els;
+      else return { ok: true, val: regs[t.r] };
+    }
+  }catch(e){ return { ok: false, err: String(e) }; }
+}
+function printTInst(i){
+  switch(i.k){
+    case "movi": return `r${i.d} = movi ${i.imm}`;
+    case "mov": return `r${i.d} = mov r${i.s}`;
+    case "bin": return `r${i.d} = ${i.op} r${i.a}, r${i.b}`;
+    case "load": return `r${i.d} = load slot${i.slot}`;
+    case "store": return `store slot${i.slot}, r${i.s}`;
+  }
+  return "?";
+}
+function printTTerm(t){
+  if(t.k === "jmp") return `jmp ${t.l}`;
+  if(t.k === "br") return `br r${t.cond}, ${t.then}, ${t.els}`;
+  return `ret r${t.r}`;
+}
+function printTarget(tf){
+  let out = `fn ${tf.name} regs=${tf.numRegs} slots=${tf.numSlots} params=[${tf.paramRegs.map(r => "r" + r).join(", ")}] {\n`;
+  for(const b of tf.blocks){
+    out += `${b.label}:\n`;
+    for(const i of b.insts) out += "  " + printTInst(i) + "\n";
+    out += "  " + printTTerm(b.term) + "\n";
+  }
+  return out + "}";
+}
+
+// ---------- presets ----------
+const PRESETS = {
+  "sum 1..n": { args: "100", ir:
+`fn main(%n) {
+entry:
+  %zero = const 0
+  %one = const 1
+  jmp loop
+loop:
+  %i = phi [entry: %one, body: %i2]
+  %acc = phi [entry: %zero, body: %acc2]
+  %cond = le %i, %n
+  br %cond, body, done
+body:
+  %acc2 = add %acc, %i
+  %i2 = add %i, %one
+  jmp loop
+done:
+  ret %acc
+}` },
+  "factorial": { args: "10", ir:
+`fn main(%n) {
+entry:
+  %one = const 1
+  jmp loop
+loop:
+  %i = phi [entry: %one, body: %i2]
+  %acc = phi [entry: %one, body: %acc2]
+  %cond = le %i, %n
+  br %cond, body, done
+body:
+  %acc2 = mul %acc, %i
+  %i2 = add %i, %one
+  jmp loop
+done:
+  ret %acc
+}` },
+  "fibonacci": { args: "20", ir:
+`fn main(%n) {
+entry:
+  %zero = const 0
+  %one = const 1
+  jmp loop
+loop:
+  %i = phi [entry: %zero, body: %i2]
+  %a = phi [entry: %zero, body: %b]
+  %b = phi [entry: %one, body: %ab]
+  %cond = lt %i, %n
+  br %cond, body, done
+body:
+  %ab = add %a, %b
+  %i2 = add %i, %one
+  jmp loop
+done:
+  ret %a
+}` },
+  "phi swap": { args: "7", ir:
+`fn main(%n) {
+entry:
+  %one = const 1
+  %x0 = const 10
+  %y0 = const 20
+  jmp loop
+loop:
+  %i = phi [entry: %one, body: %i2]
+  %x = phi [entry: %x0, body: %y]
+  %y = phi [entry: %y0, body: %x]
+  %cond = le %i, %n
+  br %cond, body, done
+body:
+  %i2 = add %i, %one
+  jmp loop
+done:
+  ret %x
+}` },
+  "branch + phi": { args: "3, 4", ir:
+`fn main(%a, %b) {
+entry:
+  %0 = const 10
+  %1 = add %a, %0
+  br %1, then, else
+then:
+  %2 = mul %1, %b
+  jmp done
+else:
+  %3 = const 0
+  jmp done
+done:
+  %4 = phi [then: %2, else: %3]
+  ret %4
+}` }
+};
+
+// ---------- rendering ----------
+const $ = id => document.getElementById(id);
+function vhtml(v){ return `<span class="mono">%${esc(v)}</span>`; }
+function fmtSet(s){ return sorted(s).map(v => "%" + v).map(esc).join(", ") || "<span class='count'>(empty)</span>"; }
+function resStr(r){ return r.ok ? r.val.toString() : "error: " + r.err; }
+
+function renderLiveness(phiFree, live){
+  let rows = "";
+  for(const b of phiFree.blocks){
+    rows += `<tr><td class="mono">${esc(b.label)}</td><td>${fmtSet(live.liveIn[b.label])}</td><td>${fmtSet(live.liveOut[b.label])}</td></tr>`;
+  }
+  $("liveness").innerHTML = `<table class="lv"><tr><th>block</th><th>live-in</th><th>live-out</th></tr>${rows}</table>`;
+}
+function renderInterference(adj){
+  let rows = "";
+  for(const v of sorted(Object.keys(adj))){
+    rows += `<tr><td class="mono">%${esc(v)}</td><td>${fmtSet(adj[v])}</td></tr>`;
+  }
+  $("interference").innerHTML = `<table class="lv"><tr><th>vreg</th><th>interferes with</th></tr>${rows}</table>`;
+}
+function renderAllocation(phiFree, alloc){
+  let rows = "";
+  for(const v of sorted(vregsOf(phiFree))){
+    const loc = allocLocation(alloc, v);
+    let cell;
+    if(loc === null) cell = `<span class="count">unused</span>`;
+    else if("reg" in loc) cell = `<span class="reg">r${loc.reg}</span>`;
+    else cell = `<span class="slot">slot${loc.slot}</span> <span class="count">spilled</span>`;
+    rows += `<tr><td class="mono">%${esc(v)}</td><td>${cell}</td></tr>`;
+  }
+  const spillNote = alloc.spilled.length
+    ? `${alloc.spilled.length} spill(s), ${alloc.numSlots} slot(s), ${alloc.rounds} round(s)`
+    : `no spills, ${alloc.rounds} round(s)`;
+  $("allocation").innerHTML = `<table class="lv"><tr><th>vreg</th><th>location</th></tr>${rows}</table><div class="count" style="margin-top:10px">${spillNote}</div>`;
+}
+function renderResult(irRes, tgtRes, alloc, k){
+  const match = (irRes.ok === tgtRes.ok) && (irRes.ok ? irRes.val === tgtRes.val : irRes.err === tgtRes.err);
+  const cls = match ? "ok" : "bad";
+  const head = match ? "Round-trip holds: the target result matches the reference interpreter" : "MISMATCH: the backend is wrong";
+  $("result").innerHTML =
+    `<div class="banner ${cls}"><span class="dot"></span>${head}` +
+    `<span class="sub">IR interpreter (unlimited vregs): <b>${esc(resStr(irRes))}</b> &nbsp;|&nbsp; ` +
+    `target interpreter (K=${k}, ${alloc.spilled.length} spill${alloc.spilled.length === 1 ? "" : "s"}): <b>${esc(resStr(tgtRes))}</b></span></div>`;
+}
+function showError(msg){
+  $("result").innerHTML = `<div class="banner bad"><span class="dot"></span>Could not compile<span class="sub err">${esc(msg)}</span></div>`;
+  for(const id of ["liveness","interference","allocation"]) $(id).innerHTML = "";
+  $("target").textContent = "";
+}
+function parseArgs(s){
+  s = s.trim(); if(s === "") return [];
+  return s.split(",").map(x => x.trim()).filter(x => x !== "").map(x => {
+    if(!/^-?\d+$/.test(x)) throw `bad integer argument '${x}'`;
+    return BigInt(x);
+  });
+}
+
+function runPipeline(){
+  try{
+    const f = parseProgram($("src").value);
+    const k = parseInt($("k").value, 10);
+    if(isNaN(k) || k < 2) throw "K must be at least 2";
+    const args = parseArgs($("args").value);
+    const phiFree = destruct(f);
+    const live = liveness(phiFree);
+    const adj = interference(phiFree, live);
+    const alloc = allocate(phiFree, k);
+    const tf = lower(alloc);
+    const irRes = irRun(f, args);
+    const tgtRes = targetRun(tf, args);
+    renderResult(irRes, tgtRes, alloc, k);
+    renderLiveness(phiFree, live);
+    renderInterference(adj);
+    renderAllocation(phiFree, alloc);
+    $("target").textContent = printTarget(tf);
+  }catch(e){ showError(String(e)); }
+}
+
+// ---------- wiring ----------
+function buildPresets(){
+  const box = $("presets");
+  for(const name of Object.keys(PRESETS)){
+    const b = document.createElement("button");
+    b.className = "chip"; b.textContent = name;
+    b.addEventListener("click", () => {
+      $("src").value = PRESETS[name].ir;
+      $("args").value = PRESETS[name].args;
+      runPipeline();
+    });
+    box.appendChild(b);
+  }
+}
+function initTheme(){
+  const order = ["auto", "light", "dark"];
+  const label = { auto: "Theme: Auto", light: "Theme: Light", dark: "Theme: Dark" };
+  let cur = "auto";
+  const apply = () => { document.documentElement.setAttribute("data-theme", cur); $("themeBtn").textContent = label[cur]; };
+  $("themeBtn").addEventListener("click", () => { cur = order[(order.indexOf(cur) + 1) % order.length]; apply(); });
+  apply();
+}
+
+buildPresets();
+initTheme();
+$("runBtn").addEventListener("click", runPipeline);
+$("src").value = PRESETS["sum 1..n"].ir;
+$("args").value = PRESETS["sum 1..n"].args;
+runPipeline();
+</script>
 </body>
 </html>
