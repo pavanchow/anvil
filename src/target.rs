@@ -93,7 +93,9 @@ pub fn run(tf: &TFunc, args: &[i64]) -> Result<i64> {
         )));
     }
     let mut regs = vec![0i64; tf.num_regs.max(1)];
-    let mut slots = vec![0i64; tf.num_slots];
+    // Slots grow on store and error on read-before-write, matching the IR
+    // interpreter so the two agree even on hand-written load/store.
+    let mut slots: Vec<i64> = Vec::with_capacity(tf.num_slots);
     for (r, a) in tf.param_regs.iter().zip(args) {
         regs[*r] = *a;
     }
@@ -115,8 +117,17 @@ pub fn run(tf: &TFunc, args: &[i64]) -> Result<i64> {
                 TInst::Movi { d, imm } => regs[*d] = *imm,
                 TInst::Mov { d, s } => regs[*d] = regs[*s],
                 TInst::Bin { d, op, a, b } => regs[*d] = op.eval(regs[*a], regs[*b])?,
-                TInst::Load { d, slot } => regs[*d] = slots[*slot],
-                TInst::Store { slot, s } => slots[*slot] = regs[*s],
+                TInst::Load { d, slot } => {
+                    regs[*d] = *slots
+                        .get(*slot)
+                        .ok_or_else(|| Error::Runtime(format!("load from unset slot{slot}")))?;
+                }
+                TInst::Store { slot, s } => {
+                    if *slot >= slots.len() {
+                        slots.resize(*slot + 1, 0);
+                    }
+                    slots[*slot] = regs[*s];
+                }
             }
         }
         match &block.term {

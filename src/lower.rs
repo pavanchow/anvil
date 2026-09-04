@@ -66,10 +66,26 @@ pub fn lower(alloc: &Allocation) -> TFunc {
         })
         .collect();
 
+    // The allocator only counts the spill slots it created, but the source may
+    // reference hand-written slots too. Size the frame to cover both.
+    let max_slot = f
+        .blocks
+        .iter()
+        .flat_map(|b| &b.insts)
+        .filter_map(|i| match i {
+            Inst::Load { slot, .. } | Inst::Store { slot, .. } => Some(*slot),
+            _ => None,
+        })
+        .max();
+    let num_slots = match max_slot {
+        Some(m) => alloc.num_slots.max(m + 1),
+        None => alloc.num_slots,
+    };
+
     TFunc {
         name: f.name.clone(),
         num_regs: alloc.num_regs,
-        num_slots: alloc.num_slots,
+        num_slots,
         param_regs: f.params.iter().map(reg).collect(),
         blocks,
     }
