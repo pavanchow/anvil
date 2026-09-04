@@ -1,0 +1,16 @@
+[package]
+name = "anvil"
+version = "0.1.0"
+edition = "2021"
+authors = ["Pavan Nallamothu"]
+description = "A from-scratch compiler backend with a readable register allocator, proven correct by a round-trip oracle."
+license = "MIT"
+repository = "https://github.com/pavanchow/anvil"
+
+[[bin]]
+name = "anvil"
+path = "src/main.rs"
+
+[lib]
+name = "anvil"
+path = "src/lib.rs"
