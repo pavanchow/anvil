@@ -356,6 +356,79 @@ function irRun(f, args){
   }catch(e){ return { ok: false, err: String(e) }; }
 }
 
+// ---------- validation ----------
+function validate(f){
+  const idx = {}; f.blocks.forEach((b, i) => idx[b.label] = i);
+  // (d) every jump/branch/phi target names a real block
+  for(const b of f.blocks){
+    for(const s of termSuccs(b.term)) if(!(s in idx)) throw `block ${b.label} jumps to unknown label ${s}`;
+    for(const inst of b.insts) if(inst.k === "phi") for(const [l] of inst.args) if(!(l in idx)) throw `phi in block ${b.label} names unknown label ${l}`;
+  }
+  // (a) every value defined at most once
+  const seen = new Set(), param = new Set(f.params), site = {};
+  for(const p of f.params){ if(seen.has(p)) throw `%${p} defined more than once`; seen.add(p); }
+  f.blocks.forEach((b, bi) => b.insts.forEach((inst, ii) => {
+    const d = instDef(inst);
+    if(d !== null){ if(seen.has(d)) throw `%${d} defined more than once`; seen.add(d); site[d] = { block: bi, pos: ii }; }
+  }));
+  // reachable blocks (unreachable code never runs, so it is not use-checked)
+  const n = f.blocks.length;
+  const reachable = new Set();
+  if(n){ const st = [0]; reachable.add(0); while(st.length){ const i = st.pop(); for(const s of termSuccs(f.blocks[i].term)){ const j = idx[s]; if(j !== undefined && !reachable.has(j)){ reachable.add(j); st.push(j); } } } }
+  // dominators (classic iterative; dom[i] includes i)
+  const predIdx = Array.from({length: n}, () => []);
+  f.blocks.forEach((b, i) => { for(const s of termSuccs(b.term)){ const j = idx[s]; if(j !== undefined) predIdx[j].push(i); } });
+  const all = new Set([...Array(n).keys()]);
+  const dom = Array.from({length: n}, () => new Set(all));
+  if(n) dom[0] = new Set([0]);
+  let changed = true;
+  while(changed){ changed = false;
+    for(let i = 1; i < n; i++){
+      let ns = null;
+      for(const p of predIdx[i]) ns = (ns === null) ? new Set(dom[p]) : new Set([...ns].filter(x => dom[p].has(x)));
+      if(ns === null) ns = new Set();
+      ns.add(i);
+      if(ns.size !== dom[i].size || [...ns].some(x => !dom[i].has(x))){ dom[i] = ns; changed = true; }
+    }
+  }
+  // (c) each phi has exactly one entry per CFG predecessor and none for a non-predecessor
+  f.blocks.forEach((b, bi) => {
+    if(!reachable.has(bi)) return;
+    const predSet = new Set(predIdx[bi]);
+    for(const inst of b.insts) if(inst.k === "phi"){
+      const entries = new Set();
+      for(const [l] of inst.args){ const pi = idx[l];
+        if(entries.has(pi)) throw `phi %${inst.dst} in block ${b.label} has a duplicate entry for ${l}`;
+        entries.add(pi);
+        if(!predSet.has(pi)) throw `phi %${inst.dst} in block ${b.label} has an entry for ${l}, which is not a predecessor`;
+      }
+      for(const pi of predSet) if(!entries.has(pi)) throw `phi %${inst.dst} in block ${b.label} is missing an entry for predecessor ${f.blocks[pi].label}`;
+    }
+  });
+  // (b) every used value is defined and its definition dominates the use
+  const useOk = (v, block, pos) => {
+    if(param.has(v)) return;
+    const s = site[v];
+    if(s === undefined) throw `use of undefined %${v} in block ${f.blocks[block].label}`;
+    const ok = (s.block === block) ? (s.pos < pos) : dom[block].has(s.block);
+    if(!ok) throw `%${v} is used in block ${f.blocks[block].label} before its definition dominates the use`;
+  };
+  const predOk = (v, pred) => {
+    if(param.has(v)) return;
+    const s = site[v];
+    if(s === undefined) throw `phi uses undefined %${v}`;
+    if(!dom[pred].has(s.block)) throw `phi value %${v} does not dominate predecessor ${f.blocks[pred].label}`;
+  };
+  f.blocks.forEach((b, bi) => {
+    if(!reachable.has(bi)) return;
+    b.insts.forEach((inst, ii) => {
+      if(inst.k === "phi"){ for(const [l, v] of inst.args) predOk(v, idx[l]); }
+      else { for(const u of instUses(inst)) useOk(u, bi, ii); }
+    });
+    for(const u of termUses(b.term)) useOk(u, bi, b.insts.length);
+  });
+}
+
 // ---------- SSA destruction ----------
 function destruct(func){ const f = clone(func); splitCriticalEdges(f); eliminatePhis(f); return f; }
 function redirect(t, from, to){
@@ -586,13 +659,18 @@ function lower(alloc){
     else term = { k: "ret", r: reg(b.term.v) };
     return { label: b.label, insts, term };
   });
-  return { name: f.name, numRegs: alloc.numRegs, numSlots: alloc.numSlots, paramRegs: f.params.map(reg), blocks };
+  // Cover hand-written slots too, not just allocator-created spill slots.
+  let maxSlot = -1;
+  for(const b of f.blocks) for(const i of b.insts) if(i.k === "load" || i.k === "store") maxSlot = Math.max(maxSlot, i.slot);
+  const numSlots = Math.max(alloc.numSlots, maxSlot + 1);
+  return { name: f.name, numRegs: alloc.numRegs, numSlots, paramRegs: f.params.map(reg), blocks };
 }
 function targetRun(tf, args){
   try{
     if(args.length !== tf.paramRegs.length) throw `expected ${tf.paramRegs.length} args, got ${args.length}`;
     const regs = new Array(Math.max(tf.numRegs, 1)).fill(0n);
-    const slots = new Array(tf.numSlots).fill(0n);
+    // Grow on store, error on read-before-write, matching the IR interpreter.
+    const slots = [];
     tf.paramRegs.forEach((r, i) => regs[r] = args[i]);
     let cur = tf.blocks[0].label, steps = 0;
     while(true){
@@ -604,7 +682,7 @@ function targetRun(tf, args){
           case "movi": regs[i.d] = wrap(BigInt(i.imm)); break;
           case "mov": regs[i.d] = regs[i.s]; break;
           case "bin": regs[i.d] = binEval(i.op, regs[i.a], regs[i.b]); break;
-          case "load": regs[i.d] = slots[i.slot]; break;
+          case "load": if(slots[i.slot] === undefined) throw `load from unset slot${i.slot}`; regs[i.d] = slots[i.slot]; break;
           case "store": slots[i.slot] = regs[i.s]; break;
         }
       }
@@ -796,6 +874,7 @@ function runPipeline(){
     const k = parseInt($("k").value, 10);
     if(isNaN(k) || k < 2) throw "K must be at least 2";
     const args = parseArgs($("args").value);
+    validate(f);
     const phiFree = destruct(f);
     const live = liveness(phiFree);
     const adj = interference(phiFree, live);
