@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anvil - a compiler backend with a readable register allocator</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
 <style>
 :root{
   --bg:#f5f5f7; --panel:#ffffff; --fg:#1d1d1f; --muted:#6e6e73;
@@ -108,12 +109,23 @@ table.lv th{ color:var(--muted); font-weight:600; }
 .err{ color:var(--bad); font-family:ui-monospace,Menlo,monospace; font-size:13px; white-space:pre-wrap; }
 .foot{ text-align:center; color:var(--muted); font-size:13px; padding:30px 20px 10px; }
 .count{ color:var(--muted); font-weight:400; font-size:12.5px; }
+.intro{ color:var(--muted); font-size:15px; margin:0 0 14px; max-width:760px; }
+details.howto{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:0 18px; box-shadow:var(--shadow); margin-bottom:16px; }
+details.howto summary{ cursor:pointer; list-style:none; padding:15px 0; font-weight:600; font-size:15px; display:flex; align-items:center; gap:10px; }
+details.howto summary::-webkit-details-marker{ display:none; }
+details.howto summary::before{ content:""; width:8px; height:8px; border-right:2px solid var(--accent); border-bottom:2px solid var(--accent); transform:rotate(-45deg); transition:transform .2s; }
+details.howto[open] summary::before{ transform:rotate(45deg); }
+details.howto .body{ padding:0 0 18px; color:var(--muted); font-size:14.5px; }
+details.howto .body ul{ margin:8px 0 0 20px; }
+details.howto .body li{ margin:6px 0; }
+details.howto code{ font-family:ui-monospace,Menlo,monospace; font-size:13px; background:var(--chip); padding:1px 5px; border-radius:5px; }
 </style>
 </head>
 <body>
 <button class="theme-toggle" id="themeBtn">Theme</button>
 
 <header class="hero">
+  <img src="logo.svg" alt="Anvil logo" width="72" height="72" style="display:block;margin:0 auto 10px">
   <h1>Anvil</h1>
   <p class="tag">A compiler backend with a readable register allocator</p>
   <p>Most build your own compiler projects stop at the front end. Anvil is the backend. It takes an SSA intermediate representation and lowers it to a small target machine with only K physical registers, and it proves the result correct by running two interpreters and asserting they agree.</p>
@@ -125,6 +137,19 @@ table.lv th{ color:var(--muted); font-weight:600; }
 
 <main>
   <div class="section-title" id="playground">Live playground</div>
+  <p class="intro">Anvil is a compiler backend you can watch: paste SSA IR, pick how many physical registers K to allow, and press <b>Compile and check</b> to see liveness, the interference graph, the register coloring and spills, and the lowered target code, verified against a reference interpreter.</p>
+  <details class="howto">
+    <summary>How to use this playground</summary>
+    <div class="body">
+      <p>The page runs the whole backend in your browser and mirrors the Rust pipeline.</p>
+      <ul>
+        <li>Edit the <b>SSA IR</b>, or click a preset to load an example program.</li>
+        <li>Set <b>K</b>, the number of physical registers. A small K forces values onto the stack as spills.</li>
+        <li>Give the function <b>arguments</b>, then press <b>Compile and check</b>.</li>
+        <li>Read the panels for liveness, interference, allocation, and target assembly. The banner reports whether the target result matches the reference interpreter.</li>
+      </ul>
+    </div>
+  </details>
   <div class="controls">
     <div class="field" style="width:100%">
       <label>SSA IR</label>

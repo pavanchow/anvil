@@ -1,3 +1,5 @@
+<img src="docs/logo.svg" alt="Anvil logo" width="96">
+
 # Anvil
 
 Anvil is a compiler backend built from scratch in Rust with zero external
