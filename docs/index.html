@@ -2,74 +2,123 @@
 <html lang="en" data-theme="auto">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Anvil - a compiler backend with a readable register allocator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anvil: a from-scratch compiler backend with a graph coloring register allocator</title>
+<meta name="description" content="Anvil by Pavan Nallamothu: a compiler backend built from scratch in Rust with zero dependencies. It lowers SSA to a small target machine with only K physical registers using a Chaitin-Briggs graph coloring allocator, then proves the result correct by running two interpreters and asserting they agree. Paste IR, pick K, and watch it live.">
+<meta name="author" content="Pavan Nallamothu (pavanchow)">
+<link rel="canonical" href="https://pavanchow.github.io/anvil/">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="author" href="https://github.com/pavanchow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Anvil: a from-scratch compiler backend with a graph coloring register allocator">
+<meta property="og:description" content="A compiler backend in Rust, zero dependencies: SSA to a small target machine with K registers, Chaitin-Briggs coloring and spilling, proven correct by two interpreters that must agree. By Pavan Nallamothu.">
+<meta property="og:url" content="https://pavanchow.github.io/anvil/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Anvil: a from-scratch compiler backend with a graph coloring register allocator">
+<meta name="twitter:description" content="Most build-your-own-compiler projects stop at the front end. Anvil is the backend, and it proves itself right. Watch it compile and check, live.">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Anvil","applicationCategory":"DeveloperApplication","operatingSystem":"Cross-platform","description":"Anvil is a compiler backend built from scratch in Rust with zero external dependencies. It lowers an SSA intermediate representation to a small target machine using a Chaitin-Briggs graph coloring register allocator with spilling, and validates the result by asserting that a reference IR interpreter and the lowered target interpreter return the same value.","url":"https://pavanchow.github.io/anvil/","author":{"@type":"Person","name":"Pavan Nallamothu"},"programmingLanguage":"Rust","codeRepository":"https://github.com/pavanchow/anvil","license":"https://opensource.org/licenses/MIT"}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]}
+</script>
 <style>
 :root{
-  --bg:#f5f5f7; --panel:#ffffff; --fg:#1d1d1f; --muted:#6e6e73;
-  --border:#d2d2d7; --accent:#0071e3; --good:#1a7f37; --bad:#d70015;
-  --code-bg:#f5f5f7; --chip:#ececf0; --shadow:0 1px 3px rgba(0,0,0,.08);
+  --accent:#2563eb; --accent2:#3b82f6; --accent-soft:#e8f0fe;
+  --ink:#15161c; --fg:#15161c; --muted:#5b5d67; --faint:#8a8d99;
+  --line:#e4e4e8; --border:#e4e4e8; --panel:#f2f2f5; --panel2:#fbfbfd;
+  --good:#1a7f37; --bad:#b3261e; --code-bg:#f1f1f4; --chip:#ececf0;
+  --shadow:0 1px 3px rgba(0,0,0,.07);
+  --mono:ui-monospace,SFMono-Regular,Menlo,"SF Mono",Consolas,monospace;
 }
 /* Base body first. */
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
 body{
-  margin:0; background:var(--bg); color:var(--fg);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  -webkit-font-smoothing:antialiased; line-height:1.5;
+  background:#fff; color:var(--ink);
+  font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
 }
 /* Dark defaults follow the base rules so text is never light on white. */
-@media (prefers-color-scheme: dark){
+@media(prefers-color-scheme:dark){
   html[data-theme="auto"]{
-    --bg:#000000; --panel:#1c1c1e; --fg:#f5f5f7; --muted:#98989d;
-    --border:#38383a; --accent:#0a84ff; --good:#30d158; --bad:#ff453a;
-    --code-bg:#0e0e10; --chip:#2c2c2e; --shadow:0 1px 3px rgba(0,0,0,.5);
+    --accent:#60a5fa; --accent2:#93c5fd; --accent-soft:#11213a;
+    --ink:#f2f2f6; --fg:#f2f2f6; --muted:#a1a1aa; --faint:#71717a;
+    --line:#26262a; --border:#26262a; --panel:#151517; --panel2:#0f0f11;
+    --good:#4ac26b; --bad:#ff6b60; --code-bg:#0b0b0d; --chip:#1c1c20;
+    --shadow:0 1px 3px rgba(0,0,0,.5);
   }
-  html[data-theme="auto"] body{ background:var(--bg); color:var(--fg); }
+  html[data-theme="auto"] body{ background:#000; }
 }
 html[data-theme="dark"]{
-  --bg:#000000; --panel:#1c1c1e; --fg:#f5f5f7; --muted:#98989d;
-  --border:#38383a; --accent:#0a84ff; --good:#30d158; --bad:#ff453a;
-  --code-bg:#0e0e10; --chip:#2c2c2e; --shadow:0 1px 3px rgba(0,0,0,.5);
+  --accent:#60a5fa; --accent2:#93c5fd; --accent-soft:#11213a;
+  --ink:#f2f2f6; --fg:#f2f2f6; --muted:#a1a1aa; --faint:#71717a;
+  --line:#26262a; --border:#26262a; --panel:#151517; --panel2:#0f0f11;
+  --good:#4ac26b; --bad:#ff6b60; --code-bg:#0b0b0d; --chip:#1c1c20;
+  --shadow:0 1px 3px rgba(0,0,0,.5);
 }
-html[data-theme="dark"] body{ background:var(--bg); color:var(--fg); }
+html[data-theme="dark"] body{ background:#000; }
 
-*{box-sizing:border-box}
+.wrap{max-width:1040px;margin:0 auto;padding:0 28px}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.92em;background:var(--panel);border-radius:4px;padding:.1em .4em}
 
-header.hero{
-  text-align:center; padding:72px 20px 40px; max-width:820px; margin:0 auto;
-}
-.hero h1{ font-size:56px; font-weight:700; letter-spacing:-.02em; margin:0 0 6px; }
-.hero .tag{ font-size:23px; color:var(--muted); font-weight:500; margin:0 0 18px; }
-.hero p{ font-size:17px; color:var(--muted); max-width:660px; margin:0 auto; }
-.hero .links{ margin-top:22px; font-size:16px; }
-.hero .links a{ margin:0 10px; }
+nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.82);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--line)}
+@media(prefers-color-scheme:dark){html[data-theme="auto"] nav{background:rgba(0,0,0,.72)}}
+html[data-theme="dark"] nav{background:rgba(0,0,0,.72)}
+nav .row{display:flex;justify-content:space-between;align-items:center;height:56px;max-width:1040px;margin:0 auto;padding:0 28px}
+nav .brand{display:flex;align-items:center;gap:9px;font-size:18px;font-weight:650;letter-spacing:-.01em}
+nav .brand .gem{width:16px;height:16px;border-radius:4px;background:linear-gradient(135deg,#60a5fa,#2563eb)}
+nav .links{display:flex;gap:26px;align-items:center}
+nav .links a{color:var(--ink);font-size:14.5px}
+@media(max-width:640px){nav .links a:not(.gh){display:none}}
 
 .theme-toggle{
-  position:fixed; top:16px; right:16px; z-index:10;
-  border:1px solid var(--border); background:var(--panel); color:var(--fg);
-  border-radius:20px; padding:7px 14px; font-size:13px; cursor:pointer; box-shadow:var(--shadow);
+  position:fixed; top:12px; right:16px; z-index:30;
+  border:1px solid var(--border); background:var(--panel2); color:var(--fg);
+  border-radius:20px; padding:6px 13px; font-size:12.5px; cursor:pointer; box-shadow:var(--shadow);
 }
 
-main{ max-width:1120px; margin:0 auto; padding:0 20px 80px; }
+.hero{padding:80px 0 30px;text-align:center}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:clamp(40px,7vw,66px);line-height:1.05;letter-spacing:-.035em;font-weight:680;margin:18px 0 0;text-wrap:balance}
+.hero p.sub{max-width:680px;margin:24px auto 0;font-size:clamp(17px,2.1vw,21px);color:var(--muted)}
+.cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:34px}
+.btn{display:inline-block;padding:13px 26px;border-radius:999px;font-size:15px;font-weight:600;border:1px solid var(--ink);color:var(--ink)}
+.btn:hover{opacity:.75;text-decoration:none}
+.btn.primary{background:var(--ink);color:var(--panel2);border-color:var(--ink)}
+@media(prefers-color-scheme:dark){html[data-theme="auto"] .btn.primary{color:#000}}
+html[data-theme="dark"] .btn.primary{color:#000}
 
-.section-title{ font-size:15px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:44px 0 14px; }
+.howto{max-width:720px;margin:0 auto 22px;border:1px solid var(--line);border-radius:14px;padding:2px 18px;background:var(--panel2)}
+.howto>summary{cursor:pointer;font-weight:600;padding:14px 0;list-style:none}
+.howto>summary::-webkit-details-marker{display:none}
+.howto>summary::before{content:"\25B8";display:inline-block;margin-right:8px;color:var(--accent);transition:transform .15s}
+.howto[open]>summary::before{transform:rotate(90deg)}
+.howto .body{padding:0 0 16px;color:var(--muted)}
+.howto .body p{margin:0 0 10px}
+.howto .body ul{margin:8px 0 0 20px}
+.howto .body li{margin:6px 0}
+.howto code{background:var(--chip)}
+
+.stage{max-width:1120px;margin:8px auto 0;padding:0 20px}
+.section-title{display:none}
 
 .controls{
-  background:var(--panel); border:1px solid var(--border); border-radius:16px;
+  background:var(--panel2); border:1px solid var(--border); border-radius:16px;
   padding:20px; box-shadow:var(--shadow); margin-bottom:16px;
 }
 .controls .row{ display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; margin-top:14px; }
 .field{ display:flex; flex-direction:column; gap:5px; }
 .field label{ font-size:12px; color:var(--muted); font-weight:600; }
 textarea{
-  width:100%; min-height:300px; resize:vertical; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  width:100%; min-height:300px; resize:vertical; font-family:var(--mono);
   font-size:13.5px; line-height:1.55; padding:14px; border:1px solid var(--border);
   border-radius:12px; background:var(--code-bg); color:var(--fg); tab-size:2;
 }
 input[type=number],input[type=text]{
-  font-family:ui-monospace,Menlo,monospace; font-size:14px; padding:9px 11px;
+  font-family:var(--mono); font-size:14px; padding:9px 11px;
   border:1px solid var(--border); border-radius:10px; background:var(--code-bg); color:var(--fg);
 }
 input[type=number]{ width:88px; }
@@ -82,11 +131,11 @@ button.run:hover{ filter:brightness(1.06); }
 .presets{ display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
 .chip{
   background:var(--chip); border:1px solid var(--border); border-radius:980px;
-  padding:6px 14px; font-size:13px; cursor:pointer; color:var(--fg);
+  padding:6px 14px; font-size:13px; cursor:pointer; color:var(--fg); font-family:inherit;
 }
 .chip:hover{ border-color:var(--accent); }
 
-.banner{ border-radius:14px; padding:16px 20px; margin-bottom:18px; font-size:16px; font-weight:600; border:1px solid var(--border); background:var(--panel); }
+.banner{ border-radius:14px; padding:16px 20px; margin-bottom:18px; font-size:16px; font-weight:600; border:1px solid var(--border); background:var(--panel2); }
 .banner.ok{ border-color:var(--good); }
 .banner.bad{ border-color:var(--bad); }
 .banner .dot{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:9px; vertical-align:middle; }
@@ -95,48 +144,54 @@ button.run:hover{ filter:brightness(1.06); }
 .banner .sub{ display:block; font-weight:400; color:var(--muted); font-size:14px; margin-top:6px; }
 
 .grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-@media (max-width:820px){ .grid{ grid-template-columns:1fr; } .hero h1{font-size:42px} }
-.card{ background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:18px 20px; box-shadow:var(--shadow); overflow:auto; }
+@media (max-width:820px){ .grid{ grid-template-columns:1fr; } }
+.card{ background:var(--panel2); border:1px solid var(--border); border-radius:16px; padding:18px 20px; box-shadow:var(--shadow); overflow:auto; }
 .card h3{ margin:0 0 12px; font-size:15px; font-weight:600; }
 .card h3 .hint{ font-weight:400; color:var(--muted); font-size:12.5px; margin-left:6px; }
-pre.asm{ margin:0; font-family:ui-monospace,Menlo,monospace; font-size:13px; line-height:1.5; white-space:pre; color:var(--fg); }
-table.lv{ width:100%; border-collapse:collapse; font-family:ui-monospace,Menlo,monospace; font-size:12.5px; }
+pre.asm{ margin:0; font-family:var(--mono); font-size:13px; line-height:1.5; white-space:pre; color:var(--fg); }
+table.lv{ width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12.5px; }
 table.lv th,table.lv td{ text-align:left; padding:5px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
 table.lv th{ color:var(--muted); font-weight:600; }
-.mono{ font-family:ui-monospace,Menlo,monospace; font-size:12.5px; }
+.mono{ font-family:var(--mono); font-size:12.5px; }
 .reg{ color:var(--accent); font-weight:600; }
 .slot{ color:var(--bad); font-weight:600; }
-.err{ color:var(--bad); font-family:ui-monospace,Menlo,monospace; font-size:13px; white-space:pre-wrap; }
-.foot{ text-align:center; color:var(--muted); font-size:13px; padding:30px 20px 10px; }
+.err{ color:var(--bad); font-family:var(--mono); font-size:13px; white-space:pre-wrap; }
 .count{ color:var(--muted); font-weight:400; font-size:12.5px; }
-.intro{ color:var(--muted); font-size:15px; margin:0 0 14px; max-width:760px; }
-details.howto{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:0 18px; box-shadow:var(--shadow); margin-bottom:16px; }
-details.howto summary{ cursor:pointer; list-style:none; padding:15px 0; font-weight:600; font-size:15px; display:flex; align-items:center; gap:10px; }
-details.howto summary::-webkit-details-marker{ display:none; }
-details.howto summary::before{ content:""; width:8px; height:8px; border-right:2px solid var(--accent); border-bottom:2px solid var(--accent); transform:rotate(-45deg); transition:transform .2s; }
-details.howto[open] summary::before{ transform:rotate(45deg); }
-details.howto .body{ padding:0 0 18px; color:var(--muted); font-size:14.5px; }
-details.howto .body ul{ margin:8px 0 0 20px; }
-details.howto .body li{ margin:6px 0; }
-details.howto code{ font-family:ui-monospace,Menlo,monospace; font-size:13px; background:var(--chip); padding:1px 5px; border-radius:5px; }
+.intro{ color:var(--muted); font-size:15px; margin:0 0 14px; max-width:820px; }
+
+section{padding:84px 0;border-top:1px solid var(--line)}
+h2{font-size:clamp(26px,4.2vw,38px);line-height:1.12;letter-spacing:-.025em;font-weight:660;text-align:center;max-width:780px;margin:0 auto}
+.lead{max-width:680px;margin:18px auto 0;text-align:center;color:var(--muted)}
+pre.block{background:#15161c;color:#ececf4;border-radius:14px;padding:20px 22px;font-family:var(--mono);font-size:13px;line-height:1.6;overflow-x:auto;max-width:820px;margin:28px auto 0;white-space:pre}
+pre.block .cm{color:#8a8d9a} pre.block .g{color:#7fd6a0} pre.block .k{color:#93c5fd}
+
+footer{padding:60px 0;border-top:1px solid var(--line);text-align:center;color:var(--muted)}
+footer .name{color:var(--ink);font-weight:600}footer p+p{margin-top:10px}
+@media(max-width:640px){.hero{padding:56px 0 24px}section{padding:60px 0}}
 </style>
 </head>
 <body>
+<noscript><div class="wrap" style="padding:40px 28px;color:#6a6d78">Anvil is a compiler backend built from scratch in Rust with zero dependencies by Pavan Nallamothu. It lowers SSA to a small target machine with a Chaitin-Briggs graph coloring register allocator, then proves the lowering correct by asserting a reference interpreter and the target interpreter agree. Source: <a href="https://github.com/pavanchow/anvil">github.com/pavanchow/anvil</a>.</div></noscript>
+
 <button class="theme-toggle" id="themeBtn">Theme</button>
 
-<header class="hero">
-  <img src="logo.svg" alt="Anvil logo" width="72" height="72" style="display:block;margin:0 auto 10px">
-  <h1>Anvil</h1>
-  <p class="tag">A compiler backend with a readable register allocator</p>
-  <p>Most build your own compiler projects stop at the front end. Anvil is the backend. It takes an SSA intermediate representation and lowers it to a small target machine with only K physical registers, and it proves the result correct by running two interpreters and asserting they agree.</p>
-  <div class="links">
-    <a href="https://github.com/pavanchow/anvil">Repository</a>
-    <a href="#playground">Playground</a>
-  </div>
-</header>
+<nav><div class="row">
+  <div class="brand"><span class="gem"></span>Anvil</div>
+  <div class="links"><a href="#sim">Playground</a><a href="#proof">Proof</a><a href="#use">Use it</a><a class="gh" href="https://github.com/pavanchow/anvil">GitHub</a></div>
+</div></nav>
 
-<main>
-  <div class="section-title" id="playground">Live playground</div>
+<div class="hero">
+  <img src="logo.svg" alt="Anvil logo" width="72" height="72">
+  <p class="eyebrow">Rust · zero dependencies · compiler backend</p>
+  <h1>Compile it,<br>then prove it right.</h1>
+  <p class="sub">Most build-your-own-compiler projects stop at the front end. Anvil is the backend. It takes an SSA intermediate representation and lowers it to a small target machine with only K physical registers, using a readable Chaitin-Briggs graph coloring register allocator with real spilling. Then it proves the result correct: a reference IR interpreter and the lowered target interpreter must return the same answer, even when a tiny K forces values onto the stack. Paste IR, pick K, and watch liveness, interference, coloring, spills, and the emitted assembly.</p>
+  <div class="cta-row">
+    <a class="btn primary" href="#sim">Open the playground</a>
+    <a class="btn" href="https://github.com/pavanchow/anvil">View on GitHub</a>
+  </div>
+</div>
+
+<div class="stage" id="sim">
   <p class="intro">Anvil is a compiler backend you can watch: paste SSA IR, pick how many physical registers K to allow, and press <b>Compile and check</b> to see liveness, the interference graph, the register coloring and spills, and the lowered target code, verified against a reference interpreter.</p>
   <details class="howto">
     <summary>How to use this playground</summary>
@@ -177,11 +232,47 @@ details.howto code{ font-family:ui-monospace,Menlo,monospace; font-size:13px; ba
     <div class="card"><h3>Allocation <span class="hint">coloring and spills at K</span></h3><div id="allocation"></div></div>
     <div class="card"><h3>Target assembly <span class="hint">the lowered code the target machine runs</span></h3><pre class="asm" id="target"></pre></div>
   </div>
+</div>
 
-  <div class="foot">
-    Built from scratch by Pavan Nallamothu. This page ports the Rust pipeline to JavaScript and mirrors its behavior.
-  </div>
-</main>
+<section id="proof"><div class="wrap">
+  <h2>One equation is the whole test</h2>
+  <p class="lead">Anvil ships two interpreters: an oracle that runs the SSA over unlimited virtual registers, and a target interpreter that runs the lowered program over only K physical registers plus a stack of spill slots. For every program, at K=2, K=3, and a K large enough to need no spilling, Anvil asserts they agree.</p>
+  <pre class="block"><span class="cm"># the single invariant that validates regalloc, spilling, phi elimination, and lowering</span>
+interp_ir(program, args) <span class="k">==</span> interp_target(lower(regalloc(program, K)), args)
+
+<span class="cm"># sum of 1..n at K=2, where register pressure forces spilling to the stack</span>
+$ anvil check sum.ir --regs 2 100
+IR interpreter:     5050
+target interpreter: 5050
+registers: 2, spills: 7, slots: 7
+<span class="g">OK: results match</span></pre>
+  <p class="lead" style="margin-top:26px">If those two ever disagree, the backend is wrong, and the page shows it in the banner. That same check runs here in your browser on every compile, so the playground is not a demo of the pipeline, it is the pipeline, holding itself to the equation.</p>
+</div></section>
+
+<section id="use"><div class="wrap">
+  <h2>Use it</h2>
+  <pre class="block"><span class="cm"># build, test, and lint the backend (Rust, zero dependencies)</span>
+cargo build
+cargo test
+cargo clippy --all-targets
+
+<span class="cm"># interpret the IR and print the result, optionally with arguments</span>
+anvil run      program.ir 5
+
+<span class="cm"># show liveness, interference, coloring and spills at K registers</span>
+anvil regalloc program.ir --regs 2
+
+<span class="cm"># print the lowered target assembly</span>
+anvil emit     program.ir --regs 2
+
+<span class="cm"># run the round-trip oracle and report OK or mismatch</span>
+anvil check    program.ir --regs 2 100</pre>
+</div></section>
+
+<footer><div class="wrap">
+  <p>Anvil is MIT licensed. Source, tests, and design notes are on <a href="https://github.com/pavanchow/anvil">GitHub</a>.</p>
+  <p>By <span class="name">Pavan Nallamothu</span>.</p>
+</div></footer>
 
 <script>
 "use strict";
