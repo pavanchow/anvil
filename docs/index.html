@@ -3,25 +3,97 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Anvil: a from-scratch compiler backend with a graph coloring register allocator</title>
-<meta name="description" content="Anvil by Pavan Nallamothu: a compiler backend built from scratch in Rust with zero dependencies. It lowers SSA to a small target machine with only K physical registers using a Chaitin-Briggs graph coloring allocator, then proves the result correct by running two interpreters and asserting they agree. Paste IR, pick K, and watch it live.">
-<meta name="author" content="Pavan Nallamothu (pavanchow)">
-<meta name="keywords" content="compiler backend, register allocation, graph coloring, Chaitin-Briggs, SSA, phi elimination, liveness analysis, interference graph, spilling, code lowering, target machine, Rust, zero dependencies, round-trip oracle, build your own compiler, Pavan Nallamothu, pavanchow">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<title>Anvil: compiler backend and register allocator in Rust | Pavan Nallamothu</title>
+<meta name="description" content="Anvil is a compiler backend in Rust that lowers SSA to a target machine with graph coloring register allocation, then proves it correct. By Pavan Nallamothu.">
+<meta name="author" content="Pavan Nallamothu">
+<meta name="keywords" content="anvil, anvil rust, compiler backend, register allocation, graph coloring register allocator, Chaitin-Briggs, SSA, phi elimination, liveness analysis, interference graph, register spilling, code lowering, target machine, build your own compiler backend, Pavan Nallamothu, pavanchow">
 <link rel="canonical" href="https://pavanchow.github.io/anvil/">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="author" href="https://github.com/pavanchow">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Anvil: a from-scratch compiler backend with a graph coloring register allocator">
-<meta property="og:description" content="A compiler backend in Rust, zero dependencies: SSA to a small target machine with K registers, Chaitin-Briggs coloring and spilling, proven correct by two interpreters that must agree. By Pavan Nallamothu.">
+<meta property="og:site_name" content="Pavan Nallamothu">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="Anvil: compiler backend and register allocator in Rust | Pavan Nallamothu">
+<meta property="og:description" content="A compiler backend in Rust: SSA to a target machine with Chaitin-Briggs graph coloring and spilling, proven correct by two interpreters that must agree.">
 <meta property="og:url" content="https://pavanchow.github.io/anvil/">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Anvil: a from-scratch compiler backend with a graph coloring register allocator">
-<meta name="twitter:description" content="Most build-your-own-compiler projects stop at the front end. Anvil is the backend, and it proves itself right. Watch it compile and check, live.">
+<meta property="og:image" content="https://pavanchow.github.io/anvil/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Anvil by Pavan Nallamothu">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Anvil: compiler backend and register allocator in Rust | Pavan Nallamothu">
+<meta name="twitter:description" content="A compiler backend in Rust that lowers SSA with graph coloring register allocation and proves itself right. Watch it compile and check, live.">
+<meta name="twitter:image" content="https://pavanchow.github.io/anvil/og-image.png">
+<meta name="twitter:creator" content="@pavanchow">
+<meta name="twitter:site" content="@pavanchow">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Anvil","applicationCategory":"DeveloperApplication","operatingSystem":"Cross-platform","description":"Anvil is a compiler backend built from scratch in Rust with zero external dependencies. It lowers an SSA intermediate representation to a small target machine using a Chaitin-Briggs graph coloring register allocator with spilling, and validates the result by asserting that a reference IR interpreter and the lowered target interpreter return the same value.","url":"https://pavanchow.github.io/anvil/","author":{"@type":"Person","name":"Pavan Nallamothu"},"programmingLanguage":"Rust","softwareVersion":"0.1.0","codeRepository":"https://github.com/pavanchow/anvil","license":"https://opensource.org/licenses/MIT"}
-</script>
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Person","name":"Pavan Nallamothu","alternateName":"pavanchow","url":"https://github.com/pavanchow","sameAs":["https://github.com/pavanchow","https://hackerone.com/pavanchow"]}
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://pavanchow.github.io/anvil/#software",
+      "name": "Anvil",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Cross-platform",
+      "description": "Anvil is a compiler backend built from scratch in Rust with zero external dependencies. It lowers an SSA intermediate representation to a small target machine using a Chaitin-Briggs graph coloring register allocator with spilling, and validates the result by asserting that a reference IR interpreter and the lowered target interpreter return the same value.",
+      "url": "https://pavanchow.github.io/anvil/",
+      "image": "https://pavanchow.github.io/anvil/og-image.png",
+      "softwareVersion": "0.1.0",
+      "programmingLanguage": "Rust",
+      "codeRepository": "https://github.com/pavanchow/anvil",
+      "license": "https://opensource.org/licenses/MIT",
+      "datePublished": "2026-08-21",
+      "author": { "@id": "https://github.com/pavanchow#person" },
+      "publisher": { "@id": "https://github.com/pavanchow#person" },
+      "keywords": "compiler backend, graph coloring register allocation, Chaitin-Briggs, SSA lowering, liveness analysis, interference graph, register spilling",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "featureList": [
+        "Lowers SSA intermediate representation to a small target machine",
+        "Chaitin-Briggs graph coloring register allocation with real spilling",
+        "Liveness analysis and interference graph construction",
+        "Phi elimination on the way out of SSA",
+        "Round-trip oracle: a reference IR interpreter and the lowered target interpreter must agree",
+        "Zero external dependencies, pure Rust"
+      ]
+    },
+    {
+      "@type": "Person",
+      "@id": "https://github.com/pavanchow#person",
+      "name": "Pavan Nallamothu",
+      "alternateName": "pavanchow",
+      "url": "https://github.com/pavanchow",
+      "jobTitle": "Software Engineer and Security Researcher",
+      "knowsAbout": ["Rust", "compilers", "compiler backends", "register allocation", "graph coloring", "SSA", "static analysis"],
+      "sameAs": ["https://github.com/pavanchow", "https://hackerone.com/pavanchow"]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://pavanchow.github.io/anvil/#website",
+      "name": "Anvil by Pavan Nallamothu",
+      "url": "https://pavanchow.github.io/anvil/",
+      "author": { "@id": "https://github.com/pavanchow#person" }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Pavan Nallamothu", "item": "https://github.com/pavanchow" },
+        { "@type": "ListItem", "position": 2, "name": "Anvil", "item": "https://pavanchow.github.io/anvil/" }
+      ]
+    },
+    {
+      "@type": "WebPage",
+      "@id": "https://pavanchow.github.io/anvil/#webpage",
+      "url": "https://pavanchow.github.io/anvil/",
+      "name": "Anvil: compiler backend and register allocator in Rust | Pavan Nallamothu",
+      "isPartOf": { "@id": "https://pavanchow.github.io/anvil/#website" },
+      "about": { "@id": "https://pavanchow.github.io/anvil/#software" },
+      "author": { "@id": "https://github.com/pavanchow#person" },
+      "inLanguage": "en"
+    }
+  ]
+}
 </script>
 <style>
 :root{
@@ -331,7 +403,18 @@ anvil check    program.ir --regs 2 100</pre>
 
 <footer><div class="wrap">
   <p>Anvil is MIT licensed. Source, tests, and design notes are on <a href="https://github.com/pavanchow/anvil">GitHub</a>.</p>
-  <p>By <span class="name">Pavan Nallamothu</span>.</p>
+  <nav class="moretools" aria-label="More open-source tools by Pavan Nallamothu" style="margin:28px auto 0;max-width:760px">
+    <p style="font-weight:600;margin-bottom:10px">More open-source tools by Pavan Nallamothu</p>
+    <p style="font-size:14.5px;line-height:1.9">
+      <a href="https://pavanchow.github.io/alchemist/">Alchemist, a compiler that lowers a small language to bytecode and runs it on a VM</a> &middot;
+      <a href="https://pavanchow.github.io/atelier/">Atelier, a code-intelligence engine with go to definition and rename</a> &middot;
+      <a href="https://pavanchow.github.io/unweave/">Unweave, an EVM bytecode disassembler in Rust</a> &middot;
+      <a href="https://pavanchow.github.io/archipelago/">Archipelago, a dependency-free distributed file system</a> &middot;
+      <a href="https://pavanchow.github.io/aurora/">Aurora, an amnesic RAM-only aarch64 kernel</a> &middot;
+      <a href="https://github.com/pavanchow">All projects on GitHub (github.com/pavanchow)</a>
+    </p>
+  </nav>
+  <p style="margin-top:24px">By <span class="name">Pavan Nallamothu</span>.</p>
 </div></footer>
 
 <script>
