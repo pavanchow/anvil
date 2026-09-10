@@ -11,6 +11,8 @@ phi elimination, the compiler backend parts most tutorials skip.
 
 **[Live demo](https://pavanchow.github.io/anvil/)** · MIT licensed · pure Rust
 
+Built from scratch by [Pavan Nallamothu](https://pavanchow.github.io/) ([LinkedIn](https://www.linkedin.com/in/pavanchow/), [GitHub](https://github.com/pavanchow)).
+
 Most build your own compiler projects stop at the front end. They parse a
 language, build an AST, maybe walk a tree to interpret it, and finish there. The
 backend is the part they skip, and register allocation is the part of the
